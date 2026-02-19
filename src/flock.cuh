@@ -10,6 +10,7 @@ class Flock {
         Boid* mpd_boids;
         int* mpd_gridIndices;
         int* mpd_gridStarts;
+        int* mpd_boidIndices;
         Boid randomBoid();
 
         size_t m_xGrids;

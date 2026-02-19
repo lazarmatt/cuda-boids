@@ -4,24 +4,24 @@
 #include <cuda/std/array>
 
 namespace Hyperparams {
-    constexpr float AVOID_FACTOR = 1.f;
-    constexpr float MATCHING_FACTOR = 1.f;
+    constexpr float AVOID_FACTOR = 2.f;
+    constexpr float MATCHING_FACTOR = .5f;
     constexpr float CENTERING_FACTOR = .1f;
 
     constexpr float  VISION_DISTANCE = 2.f;
     constexpr float  AVOID_DISTANCE = .5f;
-    constexpr float  MAX_SPEED = .5f;
+    constexpr float  MAX_SPEED = .7f;
     constexpr float  MIN_SPEED = .3f;
 
-    constexpr float  TOP_BOUND = 100.f;
-    constexpr float  RIGHT_BOUND = 100.f;
-    constexpr float  FAR_BOUND = 100.f;
-    constexpr float  BOTTOM_BOUND = -100.f;
-    constexpr float  LEFT_BOUND = -100.f;
-    constexpr float  NEAR_BOUND = -100.f;
+    constexpr float  TOP_BOUND = 75.f;
+    constexpr float  RIGHT_BOUND = 75.f;
+    constexpr float  FAR_BOUND = 75.f;
+    constexpr float  BOTTOM_BOUND = -75.f;
+    constexpr float  LEFT_BOUND = -75.f;
+    constexpr float  NEAR_BOUND = -75.f;
 
 
-    constexpr size_t FLOCK_SIZE = 300000;
+    constexpr size_t FLOCK_SIZE = 500000;
 
     
     constexpr unsigned int uint_ceil(float f)

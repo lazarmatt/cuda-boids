@@ -1,6 +1,6 @@
 NVCC     := nvcc
 CC       := gcc
-CXXFLAGS := -std=c++20 -g
+CXXFLAGS := -std=c++20
 LDFLAGS  := -lGL -lglfw
 IFLAGS   := -I./third_party/glad/include
 
