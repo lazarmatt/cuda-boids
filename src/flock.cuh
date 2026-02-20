@@ -2,6 +2,7 @@
 
 #include "boid.cuh"
 #include "utils.cuh"
+#include <random>
 
 // a flock of boids
 // set # of boids in Hyperparams.FLOCK_SIZE
@@ -11,7 +12,7 @@ class Flock {
         int* mpd_gridIndices;
         int* mpd_gridStarts;
         int* mpd_boidIndices;
-        Boid randomBoid();
+        Boid randomBoid(std::mt19937& rng);
 
         size_t m_xGrids;
         size_t m_yGrids;

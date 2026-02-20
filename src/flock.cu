@@ -1,16 +1,14 @@
 #include "flock.cuh"
-#include <random>
 #include <cmath>
 #include <cuda/std/cmath>
-#include <chrono>
 
 #include <thrust/sort.h>
 #include <thrust/device_ptr.h>
 #include <thrust/functional.h>
 #include <thrust/binary_search.h>
 
-Boid Flock::randomBoid() {
-    static std::mt19937 rng(std::random_device{}());
+Boid Flock::randomBoid(std::mt19937& rng) {
+    
     std::normal_distribution<float> dist(0.0f, 1.0f);
 
     float vxUnscaled = dist(rng);
@@ -38,6 +36,7 @@ __global__ void updateVeloc(Boid* boids, int* grids, int* gridStarts, int* boidI
         Accumulator accum;
 
         int boidIdx = boidIndices[idx];
+        Boid b = boids[boidIdx];
         
         // Get 3D grid space
         int gx = grids[idx] % Params::X_GRIDS;
@@ -48,7 +47,7 @@ __global__ void updateVeloc(Boid* boids, int* grids, int* gridStarts, int* boidI
         for (int i = -1; i <= 1; i++)
             for (int j = -1; j <= 1; j++)
                 for (int k = -1; k <= 1; k++)
-                {
+                {   
                     int nx = (gx + i + Params::X_GRIDS) % Params::X_GRIDS;
                     int ny = (gy + j + Params::Y_GRIDS) % Params::Y_GRIDS;
                     int nz = (gz + k + Params::Z_GRIDS) % Params::Z_GRIDS;
@@ -57,16 +56,18 @@ __global__ void updateVeloc(Boid* boids, int* grids, int* gridStarts, int* boidI
                     //empty cell
                     if(gridStarts[neighborGridIdx] >= Params::FLOCK_SIZE)
                         continue;
-                        
+                    
                     for(int neighborIdx = gridStarts[neighborGridIdx];neighborIdx < Params::FLOCK_SIZE;neighborIdx++)
                     {
                         //if we're out of the grid
                         if(grids[neighborIdx] != neighborGridIdx)
                             break;
 
+                        Boid neighorBoid = boids[boidIndices[neighborIdx]];
+
                         //get data for later
-                        float3 neighborPos = boids[boidIndices[neighborIdx]].getPosit();
-                        float3 myPos = boids[boidIdx].getPosit();
+                        float3 neighborPos = neighorBoid.getPosit();
+                        float3 myPos = b.getPosit();
 
                         float3 d = DeviceHelpers::sub(myPos, neighborPos);
 
@@ -82,18 +83,18 @@ __global__ void updateVeloc(Boid* boids, int* grids, int* gridStarts, int* boidI
 
                         if (sqDist < Params::AVOID_DISTANCE*Params::AVOID_DISTANCE) {
                             //Avoiding
-                            accum.close = DeviceHelpers::add(accum.close, DeviceHelpers::sub(boids[boidIdx].getPosit(),boids[boidIndices[neighborIdx]].getPosit()));
+                            accum.close = DeviceHelpers::add(accum.close, DeviceHelpers::sub(b.getPosit(),neighorBoid.getPosit()));
                         } else if (sqDist < Params::VISION_DISTANCE*Params::VISION_DISTANCE) {
                             // Centering/Matching
                             float3 wrappedNeighborPos = { myPos.x - d.x, myPos.y - d.y, myPos.z - d.z };
                             accum.pos_avg = DeviceHelpers::add(accum.pos_avg, wrappedNeighborPos);
-                            accum.vel_avg = DeviceHelpers::add(accum.vel_avg, boids[boidIndices[neighborIdx]].getVeloc());
+                            accum.vel_avg = DeviceHelpers::add(accum.vel_avg, neighorBoid.getVeloc());
                             accum.neighboring_boids += 1;
                         }
                     }
                 }
         
-        float3 newVeloc = boids[boidIdx].getVeloc();
+        float3 newVeloc = b.getVeloc();
 
         if (accum.neighboring_boids > 0) {
             //add centering/matching
@@ -101,14 +102,14 @@ __global__ void updateVeloc(Boid* boids, int* grids, int* gridStarts, int* boidI
             accum.vel_avg = DeviceHelpers::scale(accum.vel_avg,1.0f/((float) accum.neighboring_boids));
 
             newVeloc.x = newVeloc.x + 
-                (accum.pos_avg.x - boids[boidIdx].getPosit().x) * Params::CENTERING_FACTOR +
-                (accum.vel_avg.x - boids[boidIdx].getVeloc().x) * Params::MATCHING_FACTOR;
+                (accum.pos_avg.x - b.getPosit().x) * Params::CENTERING_FACTOR +
+                (accum.vel_avg.x - b.getVeloc().x) * Params::MATCHING_FACTOR;
             newVeloc.y = newVeloc.y + 
-                (accum.pos_avg.y - boids[boidIdx].getPosit().y) * Params::CENTERING_FACTOR +
-                (accum.vel_avg.y - boids[boidIdx].getVeloc().y) * Params::MATCHING_FACTOR;
+                (accum.pos_avg.y - b.getPosit().y) * Params::CENTERING_FACTOR +
+                (accum.vel_avg.y - b.getVeloc().y) * Params::MATCHING_FACTOR;
             newVeloc.z = newVeloc.z + 
-                (accum.pos_avg.z - boids[boidIdx].getPosit().z) * Params::CENTERING_FACTOR +
-                (accum.vel_avg.z - boids[boidIdx].getVeloc().z) * Params::MATCHING_FACTOR;
+                (accum.pos_avg.z - b.getPosit().z) * Params::CENTERING_FACTOR +
+                (accum.vel_avg.z - b.getVeloc().z) * Params::MATCHING_FACTOR;
         }
 
         // add avoiding
@@ -160,9 +161,6 @@ __global__ void assignGrid(Boid* boids, int* gridIndices) {
 };
 
 void Flock::step(float4* transforms) {
-    
-    //auto start = std::chrono::high_resolution_clock::now()//;
-
     //organize boids into grids
     assignGrid<<<(Params::FLOCK_SIZE + 255)/256,256>>>(mpd_boids, mpd_gridIndices);
 
@@ -187,8 +185,10 @@ void Flock::step(float4* transforms) {
 
 Flock::Flock() {
     Boid* boids = (Boid*)malloc(Params::FLOCK_SIZE*sizeof(Boid));
+
+    std::mt19937 rng(std::random_device{}());
     for(size_t i = 0; i < Params::FLOCK_SIZE; i++) {
-        boids[i] = randomBoid();
+        boids[i] = randomBoid(rng);
     }
 
     cudaMalloc(&mpd_boids, Params::FLOCK_SIZE*sizeof(Boid));

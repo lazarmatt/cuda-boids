@@ -203,7 +203,6 @@ int main() {
         glUseProgram(program);
         glUniformMatrix4fv(uView, 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(uProj, 1, GL_FALSE, glm::value_ptr(proj));
-
         
         // draw
         glClear(GL_COLOR_BUFFER_BIT);
@@ -212,7 +211,6 @@ int main() {
         glDrawArraysInstanced(GL_TRIANGLES, 0, 12, Params::FLOCK_SIZE);
 
         glfwSwapBuffers(window);
-        glfwPollEvents();
 
         //fps
         double currentTime = glfwGetTime();
@@ -225,6 +223,8 @@ int main() {
             frameCount = 0;
             lastTime = currentTime;
         }
+
+        glfwPollEvents();
     }
 
     
