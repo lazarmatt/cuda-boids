@@ -21,7 +21,7 @@ namespace Params {
     constexpr float  NEAR_BOUND = -130.f;
 
 
-    constexpr int FLOCK_SIZE = 2000000;
+    constexpr int FLOCK_SIZE = 3000000;
     constexpr int BLOCK_SIZE = 256;
     
     constexpr unsigned int uint_ceil(float f)
@@ -76,21 +76,14 @@ namespace DeviceHelpers {
         float3 normRotate = normalize(rotate);
         cuda::std::array<float4,4> ret;
         //column major
-        if (normRotate.y < -0.99f) {
-            //edge case
-            ret[0] = make_float4(1.0f,0.0f,0.0f,0.0f);
-            ret[1] = make_float4(0.0f,-1.0f,0.0f,0.0f);
-            ret[2] = make_float4(0.0f,0.0f,-1.0f,0.0f);
-            ret[3] = make_float4(translate.x,translate.y,translate.z,1.0f);
-        } else {
-            //ret[0] = {1-(normRotate.x*normRotate.x)/(1+normRotate.y), normRotate.x, -1*(normRotate.x*normRotate.z)/(1+normRotate.y), translate.x};
-            //ret[1] = {-1*normRotate.x, normRotate.y, -1*normRotate.z, translate.y};
-            //ret[2] = {-1*(normRotate.x*normRotate.z)/(1+normRotate.y), normRotate.z, 1-(normRotate.z*normRotate.z)/(1+normRotate.y), translate.z};
-            ret[0] = make_float4(1-(normRotate.x*normRotate.x)/(1+normRotate.y), -1*normRotate.x, -1*(normRotate.x*normRotate.z)/(1+normRotate.y), 0.0f);
-            ret[1] = make_float4(normRotate.x, normRotate.y, normRotate.z, 0.0f);
-            ret[2] = make_float4(-1*(normRotate.x*normRotate.z)/(1+normRotate.y), -1*normRotate.z, 1-(normRotate.z*normRotate.z)/(1+normRotate.y), 0.0f);
-            ret[3] = {translate.x,translate.y,translate.z,1.0f};
-        }
+        
+        float denom = fmaxf(1.0f + normRotate.y, 1e-6f);
+        float invnp = __fdividef(1.0f, denom);
+        ret[0] = make_float4(1-(normRotate.x*normRotate.x) * invnp, -1*normRotate.x, -1*(normRotate.x*normRotate.z) * invnp, 0.0f);
+        ret[1] = make_float4(normRotate.x, normRotate.y, normRotate.z, 0.0f);
+        ret[2] = make_float4(-1*(normRotate.x*normRotate.z) * invnp, -1*normRotate.z, 1-(normRotate.z*normRotate.z) * invnp, 0.0f);
+        ret[3] = make_float4(translate.x,translate.y,translate.z,1.0f);
+   
         return ret;
     };
 };

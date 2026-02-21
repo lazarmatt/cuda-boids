@@ -9,8 +9,6 @@
 class Flock {
     private:
         Boid* mpd_boids;
-        Boid* mpd_boids2;
-        bool m_secondBoids;
         int* mpd_gridIndices;
         int* mpd_gridStarts;
         int* mpd_boidIndices;
