@@ -35,7 +35,7 @@ float3 Flock::randomPos(std::mt19937& rng) {
     return posit;
 }
 
-__global__ void calcNewVeloc(float3* pos, float3* vel, float3* newVel, int* grids, int* gridStarts) {
+__global__ void calcNewVeloc(float3* pos, float3* vel, float3* newVel, int* grids, int* gridStarts, int* gridEnds) {
     unsigned int idx = blockIdx.x*blockDim.x + threadIdx.x;
     if (idx < Params::FLOCK_SIZE) {
         Accumulator accum;
@@ -58,16 +58,15 @@ __global__ void calcNewVeloc(float3* pos, float3* vel, float3* newVel, int* grid
                     int nz = (gz + k + Params::Z_GRIDS) % Params::Z_GRIDS;
                     int neighborGridIdx = nx + ny * Params::X_GRIDS + nz * Params::X_GRIDS * Params::Y_GRIDS;
 
+                    int neighborStart = gridStarts[neighborGridIdx];
                     //empty cell
-                    if(gridStarts[neighborGridIdx] >= Params::FLOCK_SIZE)
+                    if(neighborStart >= Params::FLOCK_SIZE)
                         continue;
                     
-                    for(int neighborIdx = gridStarts[neighborGridIdx];neighborIdx < Params::FLOCK_SIZE;neighborIdx++)
+                    int neighborEnd = gridEnds[neighborGridIdx];
+                    
+                    for(int neighborIdx = neighborStart;neighborIdx < neighborEnd;neighborIdx++)
                     {
-                        //if we're out of the grid
-                        if(grids[neighborIdx] != neighborGridIdx)
-                            break;
-
                         float3 neighborPos = pos[neighborIdx];
 
                         float3 d = DeviceHelpers::sub(boidPos, neighborPos);
@@ -195,19 +194,25 @@ void Flock::step(float3* cudaPos, float3* cudaVel) {
     thrust::sequence(d_thrustBoidIndices, d_thrustBoidIndices + Params::FLOCK_SIZE);
     thrust::sort_by_key(d_thrustGridIndices, d_thrustGridIndices+Params::FLOCK_SIZE,d_thrustBoidIndices);
 
-    //find starting point of each grid
+    //find start/end point of each grid
     thrust::device_ptr<int> d_thrustGridStarts(mpd_gridStarts);
     thrust::lower_bound(d_thrustGridIndices, d_thrustGridIndices + Params::FLOCK_SIZE,
                     thrust::counting_iterator<int>(0),
                     thrust::counting_iterator<int>(Params::X_GRIDS*Params::Y_GRIDS*Params::Z_GRIDS),
                     d_thrustGridStarts);
+    
+    thrust::device_ptr<int> d_thrustGridEnds(mpd_gridEnds);
+    thrust::upper_bound(d_thrustGridIndices, d_thrustGridIndices + Params::FLOCK_SIZE,
+                    thrust::counting_iterator<int>(0),
+                    thrust::counting_iterator<int>(Params::X_GRIDS*Params::Y_GRIDS*Params::Z_GRIDS),
+                    d_thrustGridEnds);
 
     //reorganize boids;
     organizeBoidsByGrid<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1 )/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(mpd_posBuffer, mpd_velBuffer, cudaPos, cudaVel, mpd_boidIndices);
     boidsTransfer<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1 )/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(cudaPos, cudaVel, mpd_posBuffer, mpd_velBuffer);
 
     //run boid computations
-    calcNewVeloc<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1)/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(cudaPos, cudaVel, mpd_newVels,mpd_gridIndices,mpd_gridStarts);
+    calcNewVeloc<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1)/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(cudaPos, cudaVel, mpd_newVels,mpd_gridIndices,mpd_gridStarts,mpd_gridEnds);
     updateBoid<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1)/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(cudaPos, cudaVel, mpd_newVels);
 };
 
@@ -236,7 +241,8 @@ Flock::Flock() {
     cudaMalloc(&mpd_velBuffer, Params::FLOCK_SIZE*sizeof(float3));
     cudaMalloc(&mpd_gridIndices, Params::FLOCK_SIZE*sizeof(int));
 
-    cudaMalloc(&mpd_gridStarts, Params::X_GRIDS*Params::Y_GRIDS*Params::Z_GRIDS*sizeof(int));
+    cudaMalloc(&mpd_gridStarts, Params::AREA_GRIDS*sizeof(int));
+    cudaMalloc(&mpd_gridEnds, Params::AREA_GRIDS*sizeof(int));
 
     cudaMalloc(&mpd_boidIndices, Params::FLOCK_SIZE*sizeof(int));
 };
@@ -247,5 +253,6 @@ Flock::~Flock() {
     cudaFree(mpd_velBuffer);
     cudaFree(mpd_gridIndices);
     cudaFree(mpd_gridStarts);
+    cudaFree(mpd_gridEnds);
     cudaFree(mpd_boidIndices);
 };

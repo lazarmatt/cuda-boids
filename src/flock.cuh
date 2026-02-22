@@ -9,6 +9,7 @@ class Flock {
     private:
         int* mpd_gridIndices;
         int* mpd_gridStarts;
+        int* mpd_gridEnds;
         int* mpd_boidIndices;
         float3* mpd_newVels;
         float3* mpd_velBuffer;

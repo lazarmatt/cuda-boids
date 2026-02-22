@@ -21,7 +21,7 @@ namespace Params {
     constexpr float  NEAR_BOUND = -130.f;
 
 
-    constexpr int FLOCK_SIZE = 3000000;
+    constexpr int FLOCK_SIZE = 4000000;
     constexpr int BLOCK_SIZE = 256;
     
     constexpr unsigned int uint_ceil(float f)
