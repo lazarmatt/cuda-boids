@@ -12,10 +12,29 @@
 
 const char* vertSrc = "#version 330 core\n"
     "layout(location = 0) in vec3 aPos;\n"
-    "layout(location = 1) in mat4 instance;\n"
+    "layout(location = 1) in vec3 pos;\n"
+    "layout(location = 2) in vec3 vel;\n"
     "uniform mat4 view;\n"
     "uniform mat4 proj;\n"
-    "void main() { gl_Position = proj * view * instance * vec4(aPos*50, 1.0); }\n";
+    "void main() { \n"
+    "   vec3 normRotate = normalize(vel);\n"
+    "   vec3 yAxis = vec3(0.0,1.0,0.0);\n"
+    "   vec3 right;\n"
+    "   if (abs(dot(vel, yAxis)) > 0.9999) {\n"
+    "       right = normalize(cross(vel, vec3(1.0,0.0,0.0)));\n"
+    "   } else {\n"
+    "       right = normalize(cross(yAxis,vel));\n"
+    "   }\n"
+    "   vec3 up = normRotate;\n"
+    "   vec3 fwd = normalize(cross(right,up));"
+    "   mat4 instance = mat4(\n"
+    "       vec4(right, 0.0),\n"
+    "       vec4(up, 0.0),\n"
+    "       vec4(fwd, 0.0),\n"
+    "       vec4(pos, 1.0)\n"
+    "   );\n"
+    "   gl_Position = proj * view * instance * vec4(aPos*50, 1.0);\n"
+    "}\n";
 
 const char* fragSrc = "#version 330 core\n"
     "out vec4 FragColor;\n"
@@ -140,25 +159,27 @@ int main() {
     glEnableVertexAttribArray(0);
 
     // Allocate instance data
-    unsigned int instVBO;
-    glGenBuffers(1, &instVBO);
+    size_t vecSize = sizeof(float3);
+    
+    unsigned int posVBO;
+    glGenBuffers(1, &posVBO);
 
-    glBindBuffer(GL_ARRAY_BUFFER, instVBO);
-    size_t matSize = 4*sizeof(float4);
-    glBufferData(GL_ARRAY_BUFFER, matSize*Params::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, matSize , nullptr);
+    glBindBuffer(GL_ARRAY_BUFFER, posVBO);
+    
+    glBufferData(GL_ARRAY_BUFFER, vecSize*Params::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, vecSize , nullptr);
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, matSize , (void*)(1*sizeof(float4)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, matSize , (void*)(2*sizeof(float4)));
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, matSize , (void*)(3*sizeof(float4)));
-    glEnableVertexAttribArray(4);
-
     glVertexAttribDivisor(1,1);
+
+    unsigned int velVBO;
+    glGenBuffers(1, &velVBO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, velVBO);
+    
+    glBufferData(GL_ARRAY_BUFFER, vecSize*Params::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, vecSize , nullptr);
+    glEnableVertexAttribArray(2);
     glVertexAttribDivisor(2,1);
-    glVertexAttribDivisor(3,1);
-    glVertexAttribDivisor(4,1);
 
     //unbind for now
     glBindVertexArray(0);
@@ -167,25 +188,49 @@ int main() {
     Flock flock;
     
     // register with cuda
-    cudaGraphicsResource* cudaVBO;
-    cudaError_t err = cudaGraphicsGLRegisterBuffer(&cudaVBO, instVBO, cudaGraphicsMapFlagsWriteDiscard);
+    cudaGraphicsResource* cudaPosVBO;
+    cudaError_t err = cudaGraphicsGLRegisterBuffer(&cudaPosVBO, posVBO, cudaGraphicsMapFlagsWriteDiscard);
     if (err != cudaSuccess)
         std::cout << cudaGetErrorString(err) << std::endl;
+    
+    cudaGraphicsResource* cudaVelVBO;
+    err = cudaGraphicsGLRegisterBuffer(&cudaVelVBO, velVBO, cudaGraphicsMapFlagsWriteDiscard);
+    if (err != cudaSuccess)
+        std::cout << cudaGetErrorString(err) << std::endl;
+
+
+    size_t size;
+    float3* poss;
+    float3* vels;
+
+    cudaGraphicsMapResources(1,&cudaPosVBO,0);
+    cudaGraphicsResourceGetMappedPointer((void**)&poss,&size,cudaPosVBO);
+    
+    cudaGraphicsMapResources(1,&cudaVelVBO,0);
+    cudaGraphicsResourceGetMappedPointer((void**)&vels,&size,cudaVelVBO);
+    
+    flock.genRand(poss, vels);
+    
+    cudaGraphicsUnmapResources(1, &cudaPosVBO, 0);
+    cudaGraphicsUnmapResources(1, &cudaVelVBO, 0);
+
 
     double lastTime = glfwGetTime();
     int frameCount = 0;
 
     while (!glfwWindowShouldClose(window)) {
         // run calculations
-        size_t size;
-        float4* transforms;
         
-        cudaGraphicsMapResources(1,&cudaVBO,0);
-        cudaGraphicsResourceGetMappedPointer((void**)&transforms,&size,cudaVBO);
+        cudaGraphicsMapResources(1,&cudaPosVBO,0);
+        cudaGraphicsResourceGetMappedPointer((void**)&poss,&size,cudaPosVBO);
+
+        cudaGraphicsMapResources(1,&cudaVelVBO,0);
+        cudaGraphicsResourceGetMappedPointer((void**)&vels,&size,cudaVelVBO);
         
-        flock.step(transforms);
+        flock.step(poss, vels);
         
-        cudaGraphicsUnmapResources(1, &cudaVBO, 0);
+        cudaGraphicsUnmapResources(1, &cudaPosVBO, 0);
+        cudaGraphicsUnmapResources(1, &cudaVelVBO, 0);
         
         // Move camera
         glm::vec3 eye(
@@ -206,7 +251,6 @@ int main() {
         
         // draw
         glClear(GL_COLOR_BUFFER_BIT);
-        glUseProgram(program);
         glBindVertexArray(boidVAO);
         glDrawArraysInstanced(GL_TRIANGLES, 0, 12, Params::FLOCK_SIZE);
 

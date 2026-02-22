@@ -1,6 +1,5 @@
 #pragma once
 
-#include "boid.cuh"
 #include "utils.cuh"
 #include <random>
 
@@ -8,18 +7,20 @@
 // set # of boids in Hyperparams.FLOCK_SIZE
 class Flock {
     private:
-        Boid* mpd_boids;
         int* mpd_gridIndices;
         int* mpd_gridStarts;
         int* mpd_boidIndices;
-        Boid randomBoid(std::mt19937& rng);
+        float3* mpd_newVels;
+        float3 randomPos(std::mt19937& rng);
+        float3 randomVel(std::mt19937& rng);
 
         size_t m_xGrids;
         size_t m_yGrids;
         size_t m_zGrids;
     
     public:
-        void step(float4* transforms);
+        void step(float3* cudaPos, float3* cudaVel);
+        void genRand(float3* cudaPos, float3* cudaVel);
         Flock();
         ~Flock();
 
