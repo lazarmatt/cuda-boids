@@ -126,33 +126,27 @@ int main() {
     // Allocate instance data
     size_t vecSize = sizeof(__half2);
     
-    unsigned int xvxVBO[2];
-    glGenBuffers(2, xvxVBO);
-    glBindBuffer(GL_ARRAY_BUFFER, xvxVBO[0]);
-    glBufferData(GL_ARRAY_BUFFER, vecSize*HostParams::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, xvxVBO[1]);
+    unsigned int xvxVBO;
+    glGenBuffers(2, &xvxVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, xvxVBO);
     glBufferData(GL_ARRAY_BUFFER, vecSize*HostParams::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
     
     glVertexAttribPointer(1, 1, GL_HALF_FLOAT, GL_FALSE, vecSize , nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribDivisor(1,1);
 
-    unsigned int yvyVBO[2];
-    glGenBuffers(2, yvyVBO);
-    glBindBuffer(GL_ARRAY_BUFFER, yvyVBO[0]);
-    glBufferData(GL_ARRAY_BUFFER, vecSize*HostParams::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, yvyVBO[1]);
+    unsigned int yvyVBO;
+    glGenBuffers(2, &yvyVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, yvyVBO);
     glBufferData(GL_ARRAY_BUFFER, vecSize*HostParams::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
     
     glVertexAttribPointer(2, 1, GL_HALF_FLOAT, GL_FALSE, vecSize , nullptr);
     glEnableVertexAttribArray(2);
     glVertexAttribDivisor(2,1);
 
-    unsigned int zvzVBO[2];
-    glGenBuffers(2, zvzVBO);
-    glBindBuffer(GL_ARRAY_BUFFER, zvzVBO[0]);
-    glBufferData(GL_ARRAY_BUFFER, vecSize*HostParams::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, zvzVBO[1]);
+    unsigned int zvzVBO;
+    glGenBuffers(2, &zvzVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, zvzVBO);
     glBufferData(GL_ARRAY_BUFFER, vecSize*HostParams::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
     
     glVertexAttribPointer(3, 1, GL_HALF_FLOAT, GL_FALSE, vecSize , nullptr);
@@ -166,42 +160,34 @@ int main() {
     Flock flock;
     
     // register with cuda
-    cudaGraphicsResource* cudaXvxVBO[2];
-    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaXvxVBO[0], xvxVBO[0], cudaGraphicsMapFlagsNone));
-    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaXvxVBO[1], xvxVBO[1], cudaGraphicsMapFlagsNone));
+    cudaGraphicsResource* cudaXvxVBO;
+    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaXvxVBO, xvxVBO, cudaGraphicsMapFlagsNone));
     
-    cudaGraphicsResource* cudaYvyVBO[2];
-    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaYvyVBO[0], yvyVBO[0], cudaGraphicsMapFlagsNone));
-    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaYvyVBO[1], yvyVBO[1], cudaGraphicsMapFlagsNone));
+    cudaGraphicsResource* cudaYvyVBO;
+    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaYvyVBO, yvyVBO, cudaGraphicsMapFlagsNone));
 
-    cudaGraphicsResource* cudaZvzVBO[2];
-    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaZvzVBO[0], zvzVBO[0], cudaGraphicsMapFlagsNone));
-    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaZvzVBO[1], zvzVBO[1], cudaGraphicsMapFlagsNone));
+    cudaGraphicsResource* cudaZvzVBO;
+    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaZvzVBO, zvzVBO, cudaGraphicsMapFlagsNone));
 
-    int frontBuffer = 0;
-    int backBuffer = 1;
     size_t size;
     __half2* xvxs;
     __half2* yvys;
     __half2* zvzs;
-    __half2* xvxs2;
-    __half2* yvys2;
-    __half2* zvzs2;
 
-    CUDA_CHECK(cudaGraphicsMapResources(1,&cudaXvxVBO[frontBuffer],0));
-    CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&xvxs,&size,cudaXvxVBO[frontBuffer]));
+    CUDA_CHECK(cudaGraphicsMapResources(1,&cudaXvxVBO,0));
+    CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&xvxs,&size,cudaXvxVBO));
     
-    CUDA_CHECK(cudaGraphicsMapResources(1,&cudaYvyVBO[frontBuffer],0));
-    CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&yvys,&size,cudaYvyVBO[frontBuffer]));
+    CUDA_CHECK(cudaGraphicsMapResources(1,&cudaYvyVBO,0));
+    CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&yvys,&size,cudaYvyVBO));
 
-    CUDA_CHECK(cudaGraphicsMapResources(1,&cudaZvzVBO[frontBuffer],0));
-    CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&zvzs,&size,cudaZvzVBO[frontBuffer]));
+    CUDA_CHECK(cudaGraphicsMapResources(1,&cudaZvzVBO,0));
+    CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&zvzs,&size,cudaZvzVBO));
     
     flock.genRand(xvxs, yvys, zvzs);
     
-    CUDA_CHECK(cudaGraphicsUnmapResources(1, cudaXvxVBO, 0));
-    CUDA_CHECK(cudaGraphicsUnmapResources(1, cudaYvyVBO, 0));
-    CUDA_CHECK(cudaGraphicsUnmapResources(1, cudaZvzVBO, 0));
+    CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaXvxVBO, 0));
+    CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaYvyVBO, 0));
+    CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaZvzVBO, 0));
 
 
     double lastTime = glfwGetTime();
@@ -210,32 +196,20 @@ int main() {
     while (!glfwWindowShouldClose(window)) {
         // run calculations
         
-        CUDA_CHECK(cudaGraphicsMapResources(1,&cudaXvxVBO[frontBuffer],0));
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&xvxs,&size,cudaXvxVBO[frontBuffer]));
+        CUDA_CHECK(cudaGraphicsMapResources(1,&cudaXvxVBO,0));
+        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&xvxs,&size,cudaXvxVBO));
         
-        CUDA_CHECK(cudaGraphicsMapResources(1,&cudaYvyVBO[frontBuffer],0));
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&yvys,&size,cudaYvyVBO[frontBuffer]));
+        CUDA_CHECK(cudaGraphicsMapResources(1,&cudaYvyVBO,0));
+        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&yvys,&size,cudaYvyVBO));
 
-        CUDA_CHECK(cudaGraphicsMapResources(1,&cudaZvzVBO[frontBuffer],0));
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&zvzs,&size,cudaZvzVBO[frontBuffer]));
-
-        CUDA_CHECK(cudaGraphicsMapResources(1,&cudaXvxVBO[backBuffer],0));
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&xvxs2,&size,cudaXvxVBO[backBuffer]));
+        CUDA_CHECK(cudaGraphicsMapResources(1,&cudaZvzVBO,0));
+        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&zvzs,&size,cudaZvzVBO));
         
-        CUDA_CHECK(cudaGraphicsMapResources(1,&cudaYvyVBO[backBuffer],0));
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&yvys2,&size,cudaYvyVBO[backBuffer]));
-
-        CUDA_CHECK(cudaGraphicsMapResources(1,&cudaZvzVBO[backBuffer],0));
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void**)&zvzs2,&size,cudaZvzVBO[backBuffer]));
+        flock.step(xvxs, yvys, zvzs);
         
-        flock.step(xvxs, yvys, zvzs, xvxs2, yvys2, zvzs2);
-        
-        CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaXvxVBO[frontBuffer], 0));
-        CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaYvyVBO[frontBuffer], 0));
-        CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaZvzVBO[frontBuffer], 0));
-        CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaXvxVBO[backBuffer], 0));
-        CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaYvyVBO[backBuffer], 0));
-        CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaZvzVBO[backBuffer], 0));
+        CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaXvxVBO, 0));
+        CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaYvyVBO, 0));
+        CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaZvzVBO, 0));
         
         // Move camera
         glm::vec3 eye(

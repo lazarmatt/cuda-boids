@@ -200,7 +200,7 @@ __global__ void organizeBoidsByGrid(__half2* dstXvx, __half2* dstYvy, __half2* d
     }
 }
 
-void Flock::step(__half2* cudaXvx, __half2* cudaYvy, __half2* cudaZvz, __half2* bufferXvx, __half2* bufferYvy, __half2* bufferZvz) {
+void Flock::step(__half2* cudaXvx, __half2* cudaYvy, __half2* cudaZvz) {
     //organize boids into grids
     assignGrid<<<(HostParams::FLOCK_SIZE + HostParams::BLOCK_SIZE - 1 )/HostParams::BLOCK_SIZE,HostParams::BLOCK_SIZE>>>(cudaXvx, cudaYvy, cudaZvz, mpd_gridIndices);
 
@@ -223,10 +223,10 @@ void Flock::step(__half2* cudaXvx, __half2* cudaYvy, __half2* cudaZvz, __half2* 
                     d_thrustGridEnds);
 
     //reorganize boids;
-    organizeBoidsByGrid<<<(HostParams::FLOCK_SIZE + HostParams::BLOCK_SIZE - 1 )/HostParams::BLOCK_SIZE,HostParams::BLOCK_SIZE>>>(bufferXvx, bufferYvy, bufferZvz, cudaXvx, cudaYvy, cudaZvz, mpd_boidIndices);
+    organizeBoidsByGrid<<<(HostParams::FLOCK_SIZE + HostParams::BLOCK_SIZE - 1 )/HostParams::BLOCK_SIZE,HostParams::BLOCK_SIZE>>>(mpd_xBuffer, mpd_yBuffer, mpd_zBuffer, cudaXvx, cudaYvy, cudaZvz, mpd_boidIndices);
 
     //run boid computations
-    calcNewVeloc<<<(HostParams::FLOCK_SIZE + HostParams::BLOCK_SIZE - 1)/HostParams::BLOCK_SIZE,HostParams::BLOCK_SIZE>>>(bufferXvx, bufferYvy, bufferZvz, cudaXvx, cudaYvy, cudaZvz, mpd_gridIndices,mpd_gridStarts,mpd_gridEnds);
+    calcNewVeloc<<<(HostParams::FLOCK_SIZE + HostParams::BLOCK_SIZE - 1)/HostParams::BLOCK_SIZE,HostParams::BLOCK_SIZE>>>(mpd_xBuffer, mpd_yBuffer, mpd_zBuffer, cudaXvx, cudaYvy, cudaZvz, mpd_gridIndices,mpd_gridStarts,mpd_gridEnds);
 };
 
 void Flock::genRand(__half2* cudaXvx, __half2* cudaYvy, __half2* cudaZvz) {
@@ -263,6 +263,9 @@ Flock::Flock() {
     cudaMalloc(&mpd_gridEnds, HostParams::AREA_GRIDS*sizeof(int));
 
     cudaMalloc(&mpd_boidIndices, HostParams::FLOCK_SIZE*sizeof(int));
+    cudaMalloc(&mpd_xBuffer,HostParams::FLOCK_SIZE*sizeof(__half2));
+    cudaMalloc(&mpd_yBuffer,HostParams::FLOCK_SIZE*sizeof(__half2));
+    cudaMalloc(&mpd_zBuffer,HostParams::FLOCK_SIZE*sizeof(__half2));
 };
 
 Flock::~Flock() {
@@ -270,4 +273,7 @@ Flock::~Flock() {
     cudaFree(mpd_gridStarts);
     cudaFree(mpd_gridEnds);
     cudaFree(mpd_boidIndices);
+    cudaFree(mpd_xBuffer);
+    cudaFree(mpd_yBuffer);
+    cudaFree(mpd_zBuffer);
 };
