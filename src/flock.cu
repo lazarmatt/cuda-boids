@@ -7,7 +7,7 @@
 #include <thrust/functional.h>
 #include <thrust/binary_search.h>
 
-float3 Flock::randomVel(std::mt19937& rng) {
+float4 Flock::randomVel(std::mt19937& rng) {
     
     std::normal_distribution<float> dist(0.0f, 1.0f);
 
@@ -19,34 +19,37 @@ float3 Flock::randomVel(std::mt19937& rng) {
     float magnitude = (Params::MIN_SPEED + Params::MAX_SPEED) / 2;
     float scale = magnitude / len;
 
-    float3 veloc(vxUnscaled*scale,vyUnscaled*scale,vzUnscaled*scale);
+    float4 veloc(vxUnscaled*scale,vyUnscaled*scale,vzUnscaled*scale);
 
     return veloc;
 };
 
-float3 Flock::randomPos(std::mt19937& rng) {
+float4 Flock::randomPos(std::mt19937& rng) {
 
     std::uniform_real_distribution<float> distx(Params::LEFT_BOUND,Params::RIGHT_BOUND);
     std::uniform_real_distribution<float> disty(Params::BOTTOM_BOUND,Params::TOP_BOUND);
     std::uniform_real_distribution<float> distz(Params::NEAR_BOUND,Params::FAR_BOUND);
 
-    float3 posit(distx(rng),disty(rng),distz(rng));
+    float4 posit(distx(rng),disty(rng),distz(rng));
 
     return posit;
 }
 
-__global__ void calcNewVeloc(float3* pos, float3* vel, float3* newVel, int* grids, int* gridStarts, int* gridEnds) {
+__global__ void calcNewVeloc(const float4* __restrict__ pos, const float4* __restrict__ vel, float4* newVel, 
+    const int* __restrict__ grids, const int* __restrict__ gridStarts, int* __restrict__ gridEnds) {
+        
     unsigned int idx = blockIdx.x*blockDim.x + threadIdx.x;
     if (idx < Params::FLOCK_SIZE) {
         Accumulator accum;
 
         //get data for later
-        float3 boidPos = pos[idx];
+        float4 boidPos = __ldg(&pos[idx]);
+        int gridIdx = __ldg(&grids[idx]);
         
         // Get 3D grid space
-        int gx = grids[idx] % Params::X_GRIDS;
-        int gy = (grids[idx] / Params::X_GRIDS) % Params::Y_GRIDS;
-        int gz = grids[idx] / (Params::X_GRIDS * Params::Y_GRIDS);
+        int gx = gridIdx % Params::X_GRIDS;
+        int gy = (gridIdx / Params::X_GRIDS) % Params::Y_GRIDS;
+        int gz = gridIdx / (Params::X_GRIDS * Params::Y_GRIDS);
         
         //surrounding 9 grids
         for (int i = -1; i <= 1; i++)
@@ -58,18 +61,19 @@ __global__ void calcNewVeloc(float3* pos, float3* vel, float3* newVel, int* grid
                     int nz = (gz + k + Params::Z_GRIDS) % Params::Z_GRIDS;
                     int neighborGridIdx = nx + ny * Params::X_GRIDS + nz * Params::X_GRIDS * Params::Y_GRIDS;
 
-                    int neighborStart = gridStarts[neighborGridIdx];
+                    int neighborStart = __ldg(&gridStarts[neighborGridIdx]);
+                    int neighborEnd = __ldg(&gridEnds[neighborGridIdx]);
                     //empty cell
-                    if(neighborStart >= Params::FLOCK_SIZE)
+                    if(neighborStart == neighborEnd)
                         continue;
                     
-                    int neighborEnd = gridEnds[neighborGridIdx];
+                    
                     
                     for(int neighborIdx = neighborStart;neighborIdx < neighborEnd;neighborIdx++)
                     {
-                        float3 neighborPos = pos[neighborIdx];
+                        float4 neighborPos = __ldg(&pos[neighborIdx]);
 
-                        float3 d = DeviceHelpers::sub(boidPos, neighborPos);
+                        float4 d = DeviceHelpers::sub(boidPos, neighborPos);
 
                         // for each axis: if the gap is more than half the world, the short path is through the wrap
                         if (d.x >  Params::WORLD_WIDTH * 0.5f) d.x -= Params::WORLD_WIDTH;
@@ -86,15 +90,15 @@ __global__ void calcNewVeloc(float3* pos, float3* vel, float3* newVel, int* grid
                             accum.close = DeviceHelpers::add(accum.close, d);
                         } else if (sqDist < Params::VISION_DISTANCE*Params::VISION_DISTANCE) {
                             // Centering/Matching
-                            float3 wrappedNeighborPos = { boidPos.x - d.x, boidPos.y - d.y, boidPos.z - d.z };
+                            float4 wrappedNeighborPos = { boidPos.x - d.x, boidPos.y - d.y, boidPos.z - d.z };
                             accum.pos_avg = DeviceHelpers::add(accum.pos_avg, wrappedNeighborPos);
-                            accum.vel_avg = DeviceHelpers::add(accum.vel_avg, vel[neighborIdx]);
+                            accum.vel_avg = DeviceHelpers::add(accum.vel_avg, __ldg(&vel[neighborIdx]));
                             accum.neighboring_boids += 1;
                         }
                     }
                 }
         
-        float3 boidVel = vel[idx];
+        float4 boidVel = __ldg(&vel[idx]);
 
         if (accum.neighboring_boids > 0) {
             //add centering/matching
@@ -135,23 +139,24 @@ __global__ void calcNewVeloc(float3* pos, float3* vel, float3* newVel, int* grid
     }
 };
 
-__global__ void assignGrid(float3* pos, int* gridIndices) {
+__global__ void assignGrid(float4* pos, int* gridIndices) {
     unsigned int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i < Params::FLOCK_SIZE) {
-        unsigned int x = cuda::std::floor((pos[i].x - Params::LEFT_BOUND) / Params::VISION_DISTANCE);
-        unsigned int y = cuda::std::floor((pos[i].y - Params::BOTTOM_BOUND) / Params::VISION_DISTANCE);
-        unsigned int z = cuda::std::floor((pos[i].z - Params::NEAR_BOUND) / Params::VISION_DISTANCE);
+        float4 p = pos[i];
+        unsigned int x = cuda::std::floor((p.x - Params::LEFT_BOUND) / Params::VISION_DISTANCE);
+        unsigned int y = cuda::std::floor((p.y - Params::BOTTOM_BOUND) / Params::VISION_DISTANCE);
+        unsigned int z = cuda::std::floor((p.z - Params::NEAR_BOUND) / Params::VISION_DISTANCE);
 
         gridIndices[i] = x + y * Params::X_GRIDS + z * Params::X_GRIDS * Params::Y_GRIDS;
     }
 };
 
-__global__ void updateBoid(float3* pos, float3* vel, float3* newVel) {
+__global__ void updateBoid(float4* pos, float4* vel, float4* newVel) {
     unsigned int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i < Params::FLOCK_SIZE) {
-        float3 d = newVel[i];
+        float4 d = newVel[i];
         vel[i] = d;
-        float3 p = pos[i];
+        float4 p = pos[i];
         p.x += d.x;
         p.y += d.y;
         p.z += d.z;
@@ -168,7 +173,7 @@ __global__ void updateBoid(float3* pos, float3* vel, float3* newVel) {
     }
 }
 
-__global__ void organizeBoidsByGrid(float3* dstPos, float3* dstVel, float3* srcPos, float3* srcVel, int* boidIndices) {
+__global__ void organizeBoidsByGrid(float4* dstPos, float4* dstVel, float4* srcPos, float4* srcVel, int* boidIndices) {
     unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < Params::FLOCK_SIZE) {
         int src = boidIndices[i];
@@ -177,7 +182,7 @@ __global__ void organizeBoidsByGrid(float3* dstPos, float3* dstVel, float3* srcP
     }
 }
 
-__global__ void boidsTransfer(float3* dstPos, float3* dstVel, float3* srcPos, float3* srcVel) {
+__global__ void boidsTransfer(float4* dstPos, float4* dstVel, float4* srcPos, float4* srcVel) {
     unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < Params::FLOCK_SIZE) {
         dstPos[i] = srcPos[i];
@@ -185,7 +190,7 @@ __global__ void boidsTransfer(float3* dstPos, float3* dstVel, float3* srcPos, fl
     }
 }
 
-void Flock::step(float3* cudaPos, float3* cudaVel) {
+void Flock::step(float4* cudaPos, float4* cudaVel) {
     //organize boids into grids
     assignGrid<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1 )/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(cudaPos, mpd_gridIndices);
 
@@ -216,9 +221,9 @@ void Flock::step(float3* cudaPos, float3* cudaVel) {
     updateBoid<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1)/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(cudaPos, cudaVel, mpd_newVels);
 };
 
-void Flock::genRand(float3* cudaPos, float3* cudaVel) {
-    float3* initPos = (float3*)malloc(Params::FLOCK_SIZE*sizeof(float3));
-    float3* initVel = (float3*)malloc(Params::FLOCK_SIZE*sizeof(float3));
+void Flock::genRand(float4* cudaPos, float4* cudaVel) {
+    float4* initPos = (float4*)malloc(Params::FLOCK_SIZE*sizeof(float4));
+    float4* initVel = (float4*)malloc(Params::FLOCK_SIZE*sizeof(float4));
 
     std::mt19937 rng(std::random_device{}());
     for(size_t i = 0; i < Params::FLOCK_SIZE; i++) {
@@ -229,16 +234,16 @@ void Flock::genRand(float3* cudaPos, float3* cudaVel) {
         initVel[i] = randomVel(rng);
     }
 
-    cudaMemcpy(cudaPos, initPos, Params::FLOCK_SIZE*sizeof(float3), cudaMemcpyHostToDevice);
-    cudaMemcpy(cudaVel, initVel, Params::FLOCK_SIZE*sizeof(float3), cudaMemcpyHostToDevice);
+    cudaMemcpy(cudaPos, initPos, Params::FLOCK_SIZE*sizeof(float4), cudaMemcpyHostToDevice);
+    cudaMemcpy(cudaVel, initVel, Params::FLOCK_SIZE*sizeof(float4), cudaMemcpyHostToDevice);
     free(initPos);
     free(initVel);
 };
 
 Flock::Flock() {
-    cudaMalloc(&mpd_newVels, Params::FLOCK_SIZE*sizeof(float3));
-    cudaMalloc(&mpd_posBuffer, Params::FLOCK_SIZE*sizeof(float3));
-    cudaMalloc(&mpd_velBuffer, Params::FLOCK_SIZE*sizeof(float3));
+    cudaMalloc(&mpd_newVels, Params::FLOCK_SIZE*sizeof(float4));
+    cudaMalloc(&mpd_posBuffer, Params::FLOCK_SIZE*sizeof(float4));
+    cudaMalloc(&mpd_velBuffer, Params::FLOCK_SIZE*sizeof(float4));
     cudaMalloc(&mpd_gridIndices, Params::FLOCK_SIZE*sizeof(int));
 
     cudaMalloc(&mpd_gridStarts, Params::AREA_GRIDS*sizeof(int));

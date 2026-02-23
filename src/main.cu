@@ -154,12 +154,12 @@ int main() {
 
     glBindVertexArray(boidVAO);
     glBindBuffer(GL_ARRAY_BUFFER, boidVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float3)*12, boidVerts, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float4)*12, boidVerts, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     glEnableVertexAttribArray(0);
 
     // Allocate instance data
-    size_t vecSize = sizeof(float3);
+    size_t vecSize = sizeof(float4);
     
     unsigned int posVBO;
     glGenBuffers(1, &posVBO);
@@ -200,8 +200,8 @@ int main() {
 
 
     size_t size;
-    float3* poss;
-    float3* vels;
+    float4* poss;
+    float4* vels;
 
     cudaGraphicsMapResources(1,&cudaPosVBO,0);
     cudaGraphicsResourceGetMappedPointer((void**)&poss,&size,cudaPosVBO);
