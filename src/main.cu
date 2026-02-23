@@ -11,27 +11,12 @@
 #include "flock.cuh"
 
 const char* vertSrc = "#version 330 core\n"
-    "layout(location = 0) in vec3 aPos;\n"
     "layout(location = 1) in float x;\n"
-    "layout(location = 2) in float vx;\n"
-    "layout(location = 3) in float y;\n"
-    "layout(location = 4) in float vy;\n"
-    "layout(location = 5) in float z;\n"
-    "layout(location = 6) in float vz;\n"
+    "layout(location = 2) in float y;\n"
+    "layout(location = 3) in float z;\n"
     "uniform mat4 viewProj;\n"
     "void main() { \n"
-    "   vec3 pos = vec3(x, y, z);\n"
-    "   vec3 up  = normalize(vec3(vx, vy, vz));\n"
-    "   vec3 ref   = abs(up.y) > 0.9999 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);\n"
-    "   vec3 right = normalize(cross(ref, up));\n"
-    "   vec3 fwd   = cross(right, up);\n"
-    "   \n"
-    "   vec3 worldPos = right * (aPos.x * 50.0)\n"
-    "                 + up    * (aPos.y * 50.0)"
-    "                 + fwd   * (aPos.z * 50.0)\n"
-    "                 + pos;\n"
-    "   \n"
-    "   gl_Position = viewProj * vec4(worldPos, 1.0);\n"
+    "   gl_Position = viewProj * vec4(x, y, z, 1.0);\n"
     "}\n";
 
 const char* fragSrc = "#version 330 core\n"
@@ -133,38 +118,10 @@ int main() {
     glDeleteShader(vert);
     glDeleteShader(frag);
 
-    int uView = glGetUniformLocation(program, "view");
-    int uProj = glGetUniformLocation(program, "proj");
-
-    // boid structure
-    half boidVerts[] = {
-        0.0f, 0.005f, 0.0f,
-        -0.002598f, 0.0f, -0.0015f,
-        0.0f, 0.0f, 0.003f,
-
-        0.0f, 0.005f, 0.0f,
-        0.002598f, 0.0f, -0.0015f,
-        -0.002598f, 0.0f, -0.0015f,
-
-        0.0f, 0.005f, 0.0f,
-        0.0f, 0.0f, 0.003f,
-        0.002598f, 0.0f, -0.0015f,
-
-        0.0f, 0.0f, 0.003f,
-        0.002598f, 0.0f, -0.0015f,
-        -0.002598f, 0.0f, -0.0015f,
-    };
-
-    // Allocate vertex data
-    unsigned int boidVAO, boidVBO;
+    // allocate VAO
+    unsigned int boidVAO;
     glGenVertexArrays(1, &boidVAO);
-    glGenBuffers(1, &boidVBO);
-
     glBindVertexArray(boidVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, boidVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(half)*3*3, boidVerts, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_HALF_FLOAT, GL_FALSE, 0, nullptr);
-    glEnableVertexAttribArray(0);
 
     // Allocate instance data
     size_t vecSize = sizeof(__half2);
@@ -180,10 +137,6 @@ int main() {
     glEnableVertexAttribArray(1);
     glVertexAttribDivisor(1,1);
 
-    glVertexAttribPointer(2, 1, GL_HALF_FLOAT, GL_FALSE, vecSize , (void*)sizeof(half));
-    glEnableVertexAttribArray(2);
-    glVertexAttribDivisor(2,1);
-
     unsigned int yvyVBO[2];
     glGenBuffers(2, yvyVBO);
     glBindBuffer(GL_ARRAY_BUFFER, yvyVBO[0]);
@@ -191,13 +144,9 @@ int main() {
     glBindBuffer(GL_ARRAY_BUFFER, yvyVBO[1]);
     glBufferData(GL_ARRAY_BUFFER, vecSize*HostParams::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
     
-    glVertexAttribPointer(3, 1, GL_HALF_FLOAT, GL_FALSE, vecSize , nullptr);
-    glEnableVertexAttribArray(3);
-    glVertexAttribDivisor(3,1);
-
-    glVertexAttribPointer(4, 1, GL_HALF_FLOAT, GL_FALSE, vecSize , (void*)sizeof(half));
-    glEnableVertexAttribArray(4);
-    glVertexAttribDivisor(4,1);
+    glVertexAttribPointer(2, 1, GL_HALF_FLOAT, GL_FALSE, vecSize , nullptr);
+    glEnableVertexAttribArray(2);
+    glVertexAttribDivisor(2,1);
 
     unsigned int zvzVBO[2];
     glGenBuffers(2, zvzVBO);
@@ -206,13 +155,9 @@ int main() {
     glBindBuffer(GL_ARRAY_BUFFER, zvzVBO[1]);
     glBufferData(GL_ARRAY_BUFFER, vecSize*HostParams::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
     
-    glVertexAttribPointer(5, 1, GL_HALF_FLOAT, GL_FALSE, vecSize , nullptr);
-    glEnableVertexAttribArray(5);
-    glVertexAttribDivisor(5,1);
-
-    glVertexAttribPointer(6, 1, GL_HALF_FLOAT, GL_FALSE, vecSize , (void*)sizeof(half));
-    glEnableVertexAttribArray(6);
-    glVertexAttribDivisor(6,1);
+    glVertexAttribPointer(3, 1, GL_HALF_FLOAT, GL_FALSE, vecSize , nullptr);
+    glEnableVertexAttribArray(3);
+    glVertexAttribDivisor(3,1);
 
     //unbind for now
     glBindVertexArray(0);
@@ -313,7 +258,7 @@ int main() {
         // draw
         glClear(GL_COLOR_BUFFER_BIT);
         glBindVertexArray(boidVAO);
-        //glDrawArraysInstanced(GL_TRIANGLES, 0, 12, HostParams::FLOCK_SIZE);
+        glDrawArraysInstanced(GL_POINTS, 0, 1, HostParams::FLOCK_SIZE);
 
         glfwSwapBuffers(window);
 
