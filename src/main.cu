@@ -154,29 +154,31 @@ int main() {
 
     glBindVertexArray(boidVAO);
     glBindBuffer(GL_ARRAY_BUFFER, boidVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float4)*12, boidVerts, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*12, boidVerts, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     glEnableVertexAttribArray(0);
 
     // Allocate instance data
     size_t vecSize = sizeof(float4);
     
-    unsigned int posVBO;
-    glGenBuffers(1, &posVBO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, posVBO);
-    
+    unsigned int posVBO[2];
+    glGenBuffers(2, posVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, posVBO[0]);
     glBufferData(GL_ARRAY_BUFFER, vecSize*Params::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, posVBO[1]);
+    glBufferData(GL_ARRAY_BUFFER, vecSize*Params::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
+    
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, vecSize , nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribDivisor(1,1);
 
-    unsigned int velVBO;
-    glGenBuffers(1, &velVBO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, velVBO);
-    
+    unsigned int velVBO[2];
+    glGenBuffers(2, velVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, velVBO[0]);
     glBufferData(GL_ARRAY_BUFFER, vecSize*Params::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, velVBO[1]);
+    glBufferData(GL_ARRAY_BUFFER, vecSize*Params::FLOCK_SIZE,nullptr,GL_DYNAMIC_DRAW);
+    
     glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, vecSize , nullptr);
     glEnableVertexAttribArray(2);
     glVertexAttribDivisor(2,1);
@@ -188,31 +190,32 @@ int main() {
     Flock flock;
     
     // register with cuda
-    cudaGraphicsResource* cudaPosVBO;
-    cudaError_t err = cudaGraphicsGLRegisterBuffer(&cudaPosVBO, posVBO, cudaGraphicsMapFlagsWriteDiscard);
-    if (err != cudaSuccess)
-        std::cout << cudaGetErrorString(err) << std::endl;
+    cudaGraphicsResource* cudaPosVBO[2];
+    cudaGraphicsGLRegisterBuffer(&cudaPosVBO[0], posVBO[0], cudaGraphicsMapFlagsNone);
+    cudaGraphicsGLRegisterBuffer(&cudaPosVBO[1], posVBO[1], cudaGraphicsMapFlagsNone);
     
-    cudaGraphicsResource* cudaVelVBO;
-    err = cudaGraphicsGLRegisterBuffer(&cudaVelVBO, velVBO, cudaGraphicsMapFlagsWriteDiscard);
-    if (err != cudaSuccess)
-        std::cout << cudaGetErrorString(err) << std::endl;
+    cudaGraphicsResource* cudaVelVBO[2];
+    cudaGraphicsGLRegisterBuffer(&cudaVelVBO[0], velVBO[0], cudaGraphicsMapFlagsNone);
+    cudaGraphicsGLRegisterBuffer(&cudaVelVBO[1], velVBO[1], cudaGraphicsMapFlagsNone);
 
-
+    int frontBuffer = 0;
+    int backBuffer = 1;
     size_t size;
     float4* poss;
     float4* vels;
+    float4* poss2;
+    float4* vels2;
 
-    cudaGraphicsMapResources(1,&cudaPosVBO,0);
-    cudaGraphicsResourceGetMappedPointer((void**)&poss,&size,cudaPosVBO);
+    cudaGraphicsMapResources(1,cudaPosVBO,0);
+    cudaGraphicsResourceGetMappedPointer((void**)&poss,&size,cudaPosVBO[frontBuffer]);
     
-    cudaGraphicsMapResources(1,&cudaVelVBO,0);
-    cudaGraphicsResourceGetMappedPointer((void**)&vels,&size,cudaVelVBO);
+    cudaGraphicsMapResources(1,cudaVelVBO,0);
+    cudaGraphicsResourceGetMappedPointer((void**)&vels,&size,cudaVelVBO[frontBuffer]);
     
     flock.genRand(poss, vels);
     
-    cudaGraphicsUnmapResources(1, &cudaPosVBO, 0);
-    cudaGraphicsUnmapResources(1, &cudaVelVBO, 0);
+    cudaGraphicsUnmapResources(1, cudaPosVBO, 0);
+    cudaGraphicsUnmapResources(1, cudaVelVBO, 0);
 
 
     double lastTime = glfwGetTime();
@@ -221,16 +224,31 @@ int main() {
     while (!glfwWindowShouldClose(window)) {
         // run calculations
         
-        cudaGraphicsMapResources(1,&cudaPosVBO,0);
-        cudaGraphicsResourceGetMappedPointer((void**)&poss,&size,cudaPosVBO);
+        cudaGraphicsMapResources(1,&cudaPosVBO[frontBuffer],0);
+        cudaGraphicsResourceGetMappedPointer((void**)&poss,&size,cudaPosVBO[frontBuffer]);
+        
+        cudaGraphicsMapResources(1,&cudaVelVBO[frontBuffer],0);
+        cudaGraphicsResourceGetMappedPointer((void**)&vels,&size,cudaVelVBO[frontBuffer]);
 
-        cudaGraphicsMapResources(1,&cudaVelVBO,0);
-        cudaGraphicsResourceGetMappedPointer((void**)&vels,&size,cudaVelVBO);
+        cudaGraphicsMapResources(1,&cudaPosVBO[backBuffer],0);
+        cudaGraphicsResourceGetMappedPointer((void**)&poss2,&size,cudaPosVBO[backBuffer]);
         
-        flock.step(poss, vels);
+        cudaGraphicsMapResources(1,&cudaVelVBO[backBuffer],0);
+        cudaGraphicsResourceGetMappedPointer((void**)&vels2,&size,cudaVelVBO[backBuffer]);
         
-        cudaGraphicsUnmapResources(1, &cudaPosVBO, 0);
-        cudaGraphicsUnmapResources(1, &cudaVelVBO, 0);
+        flock.step(poss, vels, poss2, vels2);
+        
+        cudaGraphicsUnmapResources(1, &cudaPosVBO[frontBuffer], 0);
+        cudaGraphicsUnmapResources(1, &cudaPosVBO[frontBuffer], 0);
+        cudaGraphicsUnmapResources(1, &cudaVelVBO[backBuffer], 0);
+        cudaGraphicsUnmapResources(1, &cudaVelVBO[backBuffer], 0);
+
+        //rebind
+        glBindVertexArray(boidVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, posVBO[backBuffer]);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float4), nullptr);
+        glBindBuffer(GL_ARRAY_BUFFER, velVBO[backBuffer]);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(float4), nullptr);
         
         // Move camera
         glm::vec3 eye(
@@ -267,6 +285,8 @@ int main() {
             frameCount = 0;
             lastTime = currentTime;
         }
+
+        std::swap(frontBuffer, backBuffer);
 
         glfwPollEvents();
     }

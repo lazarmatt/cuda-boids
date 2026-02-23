@@ -12,8 +12,6 @@ class Flock {
         int* mpd_gridEnds;
         int* mpd_boidIndices;
         float4* mpd_newVels;
-        float4* mpd_velBuffer;
-        float4* mpd_posBuffer;
         float4 randomPos(std::mt19937& rng);
         float4 randomVel(std::mt19937& rng);
 
@@ -22,7 +20,7 @@ class Flock {
         size_t m_zGrids;
     
     public:
-        void step(float4* cudaPos, float4* cudaVel);
+        void step(float4* cudaPos, float4* cudaVel, float4* toPos, float4* toVel);
         void genRand(float4* cudaPos, float4* cudaVel);
         Flock();
         ~Flock();

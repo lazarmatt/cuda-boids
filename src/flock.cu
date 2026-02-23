@@ -37,7 +37,7 @@ float4 Flock::randomPos(std::mt19937& rng) {
 
 __global__ void calcNewVeloc(const float4* __restrict__ pos, const float4* __restrict__ vel, float4* newVel, 
     const int* __restrict__ grids, const int* __restrict__ gridStarts, int* __restrict__ gridEnds) {
-        
+
     unsigned int idx = blockIdx.x*blockDim.x + threadIdx.x;
     if (idx < Params::FLOCK_SIZE) {
         Accumulator accum;
@@ -182,15 +182,7 @@ __global__ void organizeBoidsByGrid(float4* dstPos, float4* dstVel, float4* srcP
     }
 }
 
-__global__ void boidsTransfer(float4* dstPos, float4* dstVel, float4* srcPos, float4* srcVel) {
-    unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < Params::FLOCK_SIZE) {
-        dstPos[i] = srcPos[i];
-        dstVel[i] = srcVel[i];
-    }
-}
-
-void Flock::step(float4* cudaPos, float4* cudaVel) {
+void Flock::step(float4* cudaPos, float4* cudaVel, float4* toPos, float4* toVel) {
     //organize boids into grids
     assignGrid<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1 )/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(cudaPos, mpd_gridIndices);
 
@@ -213,12 +205,11 @@ void Flock::step(float4* cudaPos, float4* cudaVel) {
                     d_thrustGridEnds);
 
     //reorganize boids;
-    organizeBoidsByGrid<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1 )/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(mpd_posBuffer, mpd_velBuffer, cudaPos, cudaVel, mpd_boidIndices);
-    boidsTransfer<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1 )/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(cudaPos, cudaVel, mpd_posBuffer, mpd_velBuffer);
+    organizeBoidsByGrid<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1 )/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(toPos, toVel, cudaPos, cudaVel, mpd_boidIndices);
 
     //run boid computations
-    calcNewVeloc<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1)/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(cudaPos, cudaVel, mpd_newVels,mpd_gridIndices,mpd_gridStarts,mpd_gridEnds);
-    updateBoid<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1)/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(cudaPos, cudaVel, mpd_newVels);
+    calcNewVeloc<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1)/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(toPos, toVel, mpd_newVels,mpd_gridIndices,mpd_gridStarts,mpd_gridEnds);
+    updateBoid<<<(Params::FLOCK_SIZE + Params::BLOCK_SIZE - 1)/Params::BLOCK_SIZE,Params::BLOCK_SIZE>>>(toPos, toVel, mpd_newVels);
 };
 
 void Flock::genRand(float4* cudaPos, float4* cudaVel) {
@@ -242,8 +233,6 @@ void Flock::genRand(float4* cudaPos, float4* cudaVel) {
 
 Flock::Flock() {
     cudaMalloc(&mpd_newVels, Params::FLOCK_SIZE*sizeof(float4));
-    cudaMalloc(&mpd_posBuffer, Params::FLOCK_SIZE*sizeof(float4));
-    cudaMalloc(&mpd_velBuffer, Params::FLOCK_SIZE*sizeof(float4));
     cudaMalloc(&mpd_gridIndices, Params::FLOCK_SIZE*sizeof(int));
 
     cudaMalloc(&mpd_gridStarts, Params::AREA_GRIDS*sizeof(int));
@@ -254,8 +243,6 @@ Flock::Flock() {
 
 Flock::~Flock() {
     cudaFree(mpd_newVels);
-    cudaFree(mpd_posBuffer);
-    cudaFree(mpd_velBuffer);
     cudaFree(mpd_gridIndices);
     cudaFree(mpd_gridStarts);
     cudaFree(mpd_gridEnds);
